@@ -1,5 +1,3 @@
-<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Annoying Uncle Punch</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -41,8 +39,16 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
 .tile .n { font-family: var(--display); font-size: 22px; line-height: 1; }
 .tile .st { font-size: 11px; letter-spacing: 0; color: var(--gold); text-shadow: 0 1px 0 rgba(0,0,0,.3); line-height: 1; }
 .tile.cur { background: var(--pink); }
+.tile .st .off { color: rgba(0,0,0,.3); text-shadow: none; }
+input { user-select: text; -webkit-user-select: text; }
+#overlay { touch-action: pan-y; }
+.card input[type=range] { width: 100%; box-sizing: border-box; accent-color: var(--pink); height: 30px; margin: 0; }
+.msg { min-height: 1.3em; font-size: 14px; color: #b3243e; text-align: center; }
+.btn.resume { background: var(--gold); color: var(--ink); }
+.row.quick .btn { font-size: 18px; min-height: 44px; }
+.hint { font-size: 12px; color: var(--muted); text-align: center; margin-top: -6px; }
 .tile[disabled] { background: var(--lock); cursor: not-allowed; box-shadow: 0 3px 0 rgba(0,0,0,.12); }
-.nav { align-items: center; flex-wrap: nowrap; } .nav .btn { flex: 0 0 56px; padding: 6px; } .nav .big { flex: 1; }
+.row.nav { align-items: center; flex-wrap: nowrap; gap: 6px; } .row.nav .btn { flex: 0 0 46px; padding: 6px 0; font-size: 22px; min-height: 46px; } .row.nav .big { flex: 1; font-size: 16px; white-space: nowrap; }
 .jump input { flex: 2 1 140px; min-width: 0; box-sizing: border-box; font: inherit; font-size: 18px; padding: 12px 14px; border-radius: 14px; border: 3px solid #d9ccb7; background: #fff; color: var(--ink); }
 .btn { appearance: none; border: 0; cursor: pointer; font-family: var(--display); font-size: 24px; color: #fff; background: var(--pink); padding: 12px 18px; border-radius: 16px; min-height: 52px; box-shadow: 0 4px 0 rgba(0,0,0,.25); }
 .btn.alt { background: var(--teal); } .btn.ghost { background: #eadfcb; color: var(--ink); }
@@ -53,9 +59,6 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 .stars .off { color: #d9ccb7; }
 .big { font-family: var(--display); font-size: 20px; text-align: center; }
 </style>
-<style>[hidden]{display:none!important}html,body{margin:0;height:100%}</style>
-</head><body>
-
 
 <canvas id="c"></canvas>
 
@@ -72,7 +75,7 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
   var cvs = $('c'), ctx = cvs.getContext('2d');
-  var LW = 400, LH = 620, LX = 200, LY = 585, SPEED = 800, GRAV = 520;
+  var LW = 400, LH = 620, LX = 200, LY = 556, SPEED = 800, GRAV = 520;
 
   /* ---------- levels ---------- */
   var SHIRTS = ['#3d7ea6', '#c0563a', '#4f8a5b', '#8a5fb0', '#d9a21b', '#2f6bb0'];
@@ -94,7 +97,30 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 
   var save = { stars: {} };
   try { var raw = localStorage.getItem('annoying-uncle-punch'); if (raw) save = JSON.parse(raw) || save; if (!save.stars) save.stars = {}; } catch (e) { save = { stars: {} }; }
-  function persist() { try { localStorage.setItem('annoying-uncle-punch', JSON.stringify(save)); } catch (e) {} }
+  function persist() { try { localStorage.setItem('annoying-uncle-punch', JSON.stringify(save)); } catch (e) {} pushCloud(); }
+  var cloud = { doc: null, busy: false, dirty: false };
+  function mergeStars(src) { var ch = false; Object.keys(src || {}).forEach(function (k) { var v = src[k] | 0; if (v > (save.stars[k] || 0)) { save.stars[k] = v; ch = true; } }); return ch; }
+  function pushCloud() {
+    if (!cloud.doc) return; if (cloud.busy) { cloud.dirty = true; return; }
+    cloud.busy = true; cloud.dirty = false;
+    cloud.doc.set({ stars: save.stars, t: Date.now() }).catch(function () {}).then(function () { cloud.busy = false; if (cloud.dirty) pushCloud(); });
+  }
+  function initCloud() {
+    try {
+      if (!window.claude || !window.claude.use) return;
+      Promise.all([window.claude.use('user'), window.claude.use('db')]).then(function (r) {
+        var user = r[0], db = r[1]; if (!user || !db) return;
+        return Promise.resolve(user.id()).then(function (id) {
+          if (!id) return null; cloud.doc = db.doc('data/users/' + id + '/progress'); return cloud.doc.get();
+        }).then(function (snap) {
+          if (!snap) return; var d = snap.exists ? snap.data() : null, remote = (d && d.stars) || {};
+          var changed = mergeStars(remote);
+          if (changed) { try { localStorage.setItem('annoying-uncle-punch', JSON.stringify(save)); } catch (e) {} if (screen === 'menu') { PAGE = null; menu(); } }
+          if (Object.keys(save.stars).some(function (k) { return (remote[k] | 0) < save.stars[k]; })) pushCloud();
+        });
+      }).catch(function () {});
+    } catch (e) {}
+  }
   function unlocked(i) { return i === 0 || (save.stars[i - 1] || 0) > 0; }
 
 
@@ -297,7 +323,7 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   function fire(a) {
     if (!G || G.over || G.ammo <= 0 || G.gloves.filter(function (g) { return !g.spent; }).length >= 1) return;
     G.ammo--; G.used++; G.recoil = 160; sFire();
-    G.gloves.push({ id: ++G.gid, x: LX + a.dx * 46, y: LY + a.dy * 46, vx: a.dx * SPEED, vy: a.dy * SPEED, rot: 0, life: 3.2, b: 0, spent: false, kills: 0 });
+    G.gloves.push({ id: ++G.gid, x: LX + a.dx * 74, y: LY + a.dy * 74, vx: a.dx * SPEED, vy: a.dy * SPEED, rot: 0, life: 3.2, b: 0, spent: false, kills: 0 });
     updateHud();
   }
 
@@ -306,38 +332,64 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   function show(html) { ov.innerHTML = html; ov.hidden = false; }
   function hide() { ov.hidden = true; ov.innerHTML = ''; }
   function starStr(n) { var s = ''; for (var i = 0; i < 3; i++) s += i < n ? '★' : '<span class="off">★</span>'; return s; }
-  var PAGE = null;
+  var PAGE = null, PER = 20, screen = 'menu';
   function highest() { var h = -1; Object.keys(save.stars).forEach(function (k) { if ((save.stars[k] || 0) > 0 && +k > h) h = +k; }); return h; }
-  function menu() {
-    if (G) G.running = false; $('hud').hidden = true;
-    var next = Math.min(TOTAL - 1, highest() + 1), per = 20, pages = Math.ceil(TOTAL / per);
-    if (PAGE === null) PAGE = Math.floor(next / per);
-    PAGE = Math.max(0, Math.min(pages - 1, PAGE));
-    var from = PAGE * per, tiles = '';
-    for (var i = from; i < Math.min(TOTAL, from + per); i++) {
+  function nextLevel() { return Math.min(TOTAL - 1, highest() + 1); }
+  function openMenu() { PAGE = null; menu(); }
+  function inProgress() { return !!(G && !G.over); }
+  function resume() { if (!inProgress()) return; hide(); $('hud').hidden = false; G.running = true; screen = 'play'; }
+  function setPage(p) { var pages = Math.ceil(TOTAL / PER); PAGE = Math.max(0, Math.min(pages - 1, p)); drawGrid(); }
+  function drawGrid() {
+    var next = nextLevel(), pages = Math.ceil(TOTAL / PER), from = PAGE * PER, tiles = '';
+    for (var i = from; i < Math.min(TOTAL, from + PER); i++) {
       var ok = i <= next, st = save.stars[i] || 0;
-      tiles += '<button class="tile' + (i === next ? ' cur' : '') + '" data-lv="' + i + '"' + (ok ? '' : ' disabled') + ' aria-label="Level ' + (i + 1) + '"><span class="n">' + (ok ? (i + 1) : '&#128274;') + '</span><span class="st">' + (ok ? starStr(st) : '') + '</span></button>';
+      tiles += '<button class="tile' + (i === next ? ' cur' : '') + '" data-lv="' + i + '"' + (ok ? '' : ' disabled') + ' aria-label="Level ' + (i + 1) + (ok ? ', ' + st + ' stars' : ', locked') + '"><span class="n">' + (ok ? (i + 1) : '&#128274;') + '</span><span class="st">' + (ok ? starStr(st) : '') + '</span></button>';
     }
-    show('<div class="card"><h1>Annoying Uncle Punch</h1><p>Aim, release, and launch the boxing glove. Knock every uncle out before you run out of gloves. ' + TOTAL + ' levels.</p>' +
-      '<button class="btn" id="cont" type="button">Continue: Level ' + (next + 1) + '</button>' +
-      '<div class="row nav"><button class="btn ghost" id="pv" type="button" aria-label="Previous page">&lsaquo;</button><div class="big">Levels ' + (from + 1) + '-' + Math.min(TOTAL, from + per) + '</div><button class="btn ghost" id="nx2" type="button" aria-label="Next page">&rsaquo;</button></div>' +
-      '<div class="grid">' + tiles + '</div>' +
-      '<div class="row jump"><input id="jmp" type="number" inputmode="numeric" min="1" max="' + TOTAL + '" placeholder="Level number"><button class="btn alt" id="jgo" type="button">Go</button></div></div>');
-    ov.querySelectorAll('.tile').forEach(function (b) { b.addEventListener('click', function () { brief(+b.getAttribute('data-lv')); }); });
+    $('grid').innerHTML = tiles; $('plabel').textContent = 'Levels ' + (from + 1) + '-' + Math.min(TOTAL, from + PER);
+    $('pg').value = PAGE; $('pp').disabled = $('pv').disabled = PAGE <= 0; $('nn').disabled = $('nx2').disabled = PAGE >= pages - 1;
+  }
+  function menu() {
+    if (G) G.running = false; $('hud').hidden = true; screen = 'menu';
+    var next = nextLevel(), pages = Math.ceil(TOTAL / PER), canResume = inProgress();
+    if (PAGE === null) PAGE = Math.floor(next / PER);
+    PAGE = Math.max(0, Math.min(pages - 1, PAGE));
+    show('<div class="card">' + (canResume ? '<button class="btn resume" id="rs" type="button">Resume level ' + (G.idx + 1) + '</button>' : '') +
+      '<h1>Annoying Uncle Punch</h1><p>Aim, release, and launch the boxing glove. Knock every uncle out before you run out of gloves. ' + TOTAL + ' levels.</p>' +
+      '<button class="btn" id="cont" type="button">' + (canResume ? 'Go to my level ' : 'Continue: Level ') + (next + 1) + '</button>' +
+      '<div class="row nav"><button class="btn ghost" id="pp" type="button" aria-label="Back 10 pages">&laquo;</button><button class="btn ghost" id="pv" type="button" aria-label="Previous page">&lsaquo;</button><div class="big" id="plabel"></div><button class="btn ghost" id="nx2" type="button" aria-label="Next page">&rsaquo;</button><button class="btn ghost" id="nn" type="button" aria-label="Forward 10 pages">&raquo;</button></div>' +
+      '<input id="pg" type="range" min="0" max="' + (pages - 1) + '" value="' + PAGE + '" aria-label="Scroll through levels"><div class="hint">Drag to scroll through all ' + TOTAL + ' levels</div>' +
+      '<div class="row quick"><button class="btn alt" id="mine" type="button">My level (' + (next + 1) + ')</button><button class="btn ghost" id="first" type="button">Level 1</button></div>' +
+      '<div class="grid" id="grid"></div>' +
+      '<div class="row jump"><input id="jmp" type="number" inputmode="numeric" min="1" max="' + TOTAL + '" placeholder="Level number"><button class="btn alt" id="jgo" type="button">Go</button></div><div class="msg" id="jmsg" role="status"></div></div>');
+    drawGrid();
+    $('grid').addEventListener('click', function (e) { var b = e.target.closest ? e.target.closest('.tile') : null; if (b && !b.disabled) brief(+b.getAttribute('data-lv')); });
+    if (canResume) $('rs').addEventListener('click', resume);
     $('cont').addEventListener('click', function () { brief(next); });
-    $('pv').addEventListener('click', function () { PAGE--; menu(); });
-    $('nx2').addEventListener('click', function () { PAGE++; menu(); });
-    $('jgo').addEventListener('click', function () { var v = parseInt($('jmp').value, 10); if (!(v >= 1)) return; v = Math.min(TOTAL, v) - 1; if (v > next) { PAGE = Math.floor(next / per); menu(); return; } PAGE = Math.floor(v / per); menu(); });
+    $('pv').addEventListener('click', function () { setPage(PAGE - 1); });
+    $('nx2').addEventListener('click', function () { setPage(PAGE + 1); });
+    $('pp').addEventListener('click', function () { setPage(PAGE - 10); });
+    $('nn').addEventListener('click', function () { setPage(PAGE + 10); });
+    $('pg').addEventListener('input', function () { setPage(+this.value); });
+    $('mine').addEventListener('click', function () { setPage(Math.floor(next / PER)); });
+    $('first').addEventListener('click', function () { setPage(0); });
+    function go() {
+      var v = parseInt($('jmp').value, 10), msg = $('jmsg');
+      if (!(v >= 1 && v <= TOTAL)) { msg.textContent = 'Enter a level from 1 to ' + TOTAL + '.'; return; }
+      if (v - 1 > next) { msg.textContent = 'Level ' + v + ' is locked. Your next level is ' + (next + 1) + '.'; setPage(Math.floor(next / PER)); return; }
+      brief(v - 1);
+    }
+    $('jgo').addEventListener('click', go);
+    $('jmp').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); go(); } });
   }
   function brief(i) {
-    var L = getLevel(i), types = {}; L.uncles.forEach(function (u) { types[LABELS[u.big ? 'boss' : u.t]] = 1; });
+    screen = 'brief'; var L = getLevel(i), types = {}; L.uncles.forEach(function (u) { types[LABELS[u.big ? 'boss' : u.t]] = 1; });
     show('<div class="card"><h2>Level ' + (i + 1) + '</h2><div class="big">' + L.name + '</div><p>' + Object.keys(types).join(', ') + '.</p><ul class="rules"><li>Press and drag to aim, release to launch.</li><li>You have <b>' + L.ammo + ' gloves</b> for <b>' + L.uncles.length + ' uncle' + (L.uncles.length > 1 ? 's' : '') + '</b>. Gloves bounce off the walls.</li><li>A knocked-out uncle can crash into others. Chain hits save gloves.</li></ul><div class="row"><button class="btn ghost" id="bk" type="button">Levels</button><button class="btn" id="go" type="button">Start</button></div></div>');
     $('bk').addEventListener('click', menu); $('go').addEventListener('click', function () { start(i); });
   }
-  function start(i) { hide(); $('hud').hidden = false; newGame(i); }
+  function start(i) { hide(); $('hud').hidden = false; screen = 'play'; newGame(i); }
   function endGame(win) { if (G.over) return; G.over = true; G.won = win; G.endT = 0; if (win) { sWin(); burst(LW / 2, 260, 30, true); } else sLose(); }
   function showResult() {
-    var i = G.idx, n = needHits(G.L);
+    screen = 'result'; var i = G.idx, n = needHits(G.L);
     if (G.won) {
       var st = G.used <= n ? 3 : G.used <= n + 2 ? 2 : 1;
       if ((save.stars[i] || 0) < st) { save.stars[i] = st; persist(); }
@@ -347,9 +399,10 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
     } else {
       show('<div class="card"><h2>Out of gloves</h2><div class="big">' + aliveCount() + ' uncle' + (aliveCount() > 1 ? 's' : '') + ' still annoying</div><div class="row"><button class="btn ghost" id="lv" type="button">Levels</button><button class="btn" id="rt" type="button">Try again</button></div></div>');
     }
-    $('lv').addEventListener('click', menu); $('rt').addEventListener('click', function () { start(i); });
+    $('lv').addEventListener('click', openMenu); $('rt').addEventListener('click', function () { start(i); });
   }
-  $('menuBtn').addEventListener('click', menu);
+  $('menuBtn').addEventListener('click', openMenu);
+  window.addEventListener('keydown', function (e) { if (e.key !== 'Escape') return; if (screen === 'play' && inProgress()) openMenu(); else if (screen === 'menu' && inProgress()) resume(); });
 
   /* ---------- drawing helpers ---------- */
   function rrect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
@@ -481,13 +534,21 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
     tag(c, u.x, u.t === 'peek' ? u.y - 46 * s - u.peekP * 62 * s - 8 : u.t === 'sleep' ? u.y - 112 * s : u.y - 145 * s, u.label, 0, u.hp, u.maxHp);
   }
 
+  /* boxing glove facing +x, origin at the fist */
+  function gloveShape(c) {
+    c.lineJoin = 'round'; c.lineCap = 'round';
+    c.fillStyle = '#f4efe6'; rrect(c, -36, -11, 26, 22, 5); c.fill(); c.strokeStyle = '#b9b2a4'; c.lineWidth = 1.5; c.stroke();
+    c.fillStyle = '#e63950'; c.fillRect(-29, -11, 5, 22);
+    c.fillStyle = '#c4243a'; c.beginPath(); c.ellipse(-8, 0, 13, 12, 0, 0, 7); c.fill();
+    var g = c.createRadialGradient(12, -7, 3, 8, 0, 25); g.addColorStop(0, '#ff7a8d'); g.addColorStop(.55, '#e63950'); g.addColorStop(1, '#b01c33');
+    c.fillStyle = g; c.beginPath(); c.ellipse(8, 0, 21, 17, 0, 0, 7); c.fill(); c.strokeStyle = '#8f1a2c'; c.lineWidth = 1.6; c.stroke();
+    c.fillStyle = '#d12b42'; c.beginPath(); c.ellipse(1, 12, 12, 7, -.25, 0, 7); c.fill(); c.stroke();
+    c.strokeStyle = 'rgba(110,10,30,.55)'; c.lineWidth = 1.8; c.beginPath(); c.moveTo(22, -9); c.quadraticCurveTo(16, -5, 22, -1); c.moveTo(23, 2); c.quadraticCurveTo(17, 6, 23, 10); c.stroke();
+    c.fillStyle = 'rgba(255,255,255,.38)'; c.beginPath(); c.ellipse(8, -10, 11, 4, -.12, 0, 7); c.fill();
+  }
   function drawGlove(c, g, tm, scale) {
-    c.save(); c.translate(g.x, g.y); c.rotate(g.rot + Math.atan2(g.vy, g.vx) * 0 ); c.scale(scale || 1, scale || 1);
-    c.fillStyle = '#e63950'; c.beginPath(); c.ellipse(0, 0, 17, 15, 0, 0, 7); c.fill();
-    c.fillStyle = '#ff6b81'; c.beginPath(); c.ellipse(-4, -5, 8, 6, -.4, 0, 7); c.fill();
-    c.fillStyle = '#e63950'; c.beginPath(); c.ellipse(-14, 4, 7, 6, 0, 0, 7); c.fill();
-    c.fillStyle = '#fff'; c.fillRect(-11, 11, 22, 7); c.strokeStyle = 'rgba(0,0,0,.25)'; c.lineWidth = 1.5; c.strokeRect(-11, 11, 22, 7);
-    c.restore();
+    var ang = g.spent ? g.rot : Math.atan2(g.vy, g.vx);
+    c.save(); c.translate(g.x, g.y); c.rotate(ang); c.scale((scale || 1) * .62, (scale || 1) * .62); gloveShape(c); c.restore();
   }
   function drawBG(c, L, tm) {
     var v = view, pal = BGS[L.bg], g = c.createLinearGradient(0, 0, 0, v.h);
@@ -510,20 +571,37 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
     c.fillStyle = '#7a4a2a'; rrect(c, p.x0 - 4, p.y, p.x1 - p.x0 + 8, 18, 5); c.fill();
     c.fillStyle = '#a8703c'; rrect(c, p.x0 - 4, p.y - 2, p.x1 - p.x0 + 8, 7, 3); c.fill();
   }
+  function wheel(c, x, y, r) {
+    c.fillStyle = '#2b1d2e'; c.beginPath(); c.arc(x, y, r + 3, 0, 7); c.fill(); c.fillStyle = '#8a5528'; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill();
+    c.strokeStyle = '#c99a5a'; c.lineWidth = 2.5; for (var i = 0; i < 6; i++) { var a = i * Math.PI / 3; c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(a) * (r - 2), y + Math.sin(a) * (r - 2)); c.stroke(); }
+    c.fillStyle = '#b8bfce'; c.beginPath(); c.arc(x, y, 4.5, 0, 7); c.fill();
+  }
   function drawLauncher(c, tm) {
-    var aim = G.aim ? clampAim(G.aim) : { dx: 0, dy: -1 }, ang = Math.atan2(aim.dy, aim.dx);
-    var rec = G.recoil > 0 ? G.recoil / 160 * 12 : 0;
-    c.fillStyle = 'rgba(0,0,0,.25)'; c.beginPath(); c.ellipse(LX, LY + 38, 70, 12, 0, 0, 7); c.fill();
-    c.save(); c.translate(LX, LY); c.rotate(ang + Math.PI / 2);
-    c.fillStyle = '#3b3f4a'; rrect(c, -18, -44 + rec, 36, 62, 8); c.fill(); c.fillStyle = '#585d6c'; rrect(c, -14, -44 + rec, 10, 62, 5); c.fill();
-    c.strokeStyle = '#c9ced8'; c.lineWidth = 4; c.beginPath(); for (var i = 0; i < 6; i++) { c.lineTo(i % 2 ? -9 : 9, -40 + rec + i * 9); } c.stroke();
-    if (G.ammo > 0 && !G.over) { c.save(); c.translate(0, -52 + rec); c.rotate(-Math.PI / 2 + 0); drawGlove(c, { x: 0, y: 0, rot: 0, vx: 0, vy: 0 }, tm, 1.1); c.restore(); }
+    var aim = G.aim ? clampAim(G.aim) : { dx: 0, dy: -1 }, ang = Math.atan2(aim.dy, aim.dx), px = LX, py = LY;
+    var rec = G.recoil > 0 ? G.recoil / 160 * 14 : 0;
+    c.fillStyle = 'rgba(0,0,0,.28)'; c.beginPath(); c.ellipse(px, py + 46, 86, 12, 0, 0, 7); c.fill();
+    var bg = c.createLinearGradient(0, py + 16, 0, py + 42); bg.addColorStop(0, '#6b7183'); bg.addColorStop(1, '#343845');
+    c.fillStyle = bg; c.beginPath(); c.moveTo(px - 72, py + 42); c.lineTo(px - 54, py + 16); c.lineTo(px + 54, py + 16); c.lineTo(px + 72, py + 42); c.closePath(); c.fill(); c.strokeStyle = '#23252e'; c.lineWidth = 2; c.stroke();
+    c.fillStyle = '#aab2c2'; [-48, -24, 0, 24, 48].forEach(function (x) { c.beginPath(); c.arc(px + x, py + 34, 2.5, 0, 7); c.fill(); });
+    wheel(c, px - 54, py + 30, 16); wheel(c, px + 54, py + 30, 16);
+    /* barrel (drawn pointing +x, then rotated to the aim) */
+    c.save(); c.translate(px, py); c.rotate(ang); c.translate(-rec, 0);
+    var gr = c.createLinearGradient(0, -26, 0, 26); gr.addColorStop(0, '#3a3e4b'); gr.addColorStop(.3, '#a6aebe'); gr.addColorStop(.48, '#e1e6ef'); gr.addColorStop(.7, '#7a8296'); gr.addColorStop(1, '#323642');
+    if (G.ammo > 0 && !G.over) { c.save(); c.translate(86, 0); gloveShape(c); c.restore(); }
+    c.fillStyle = '#3a3e4b'; c.beginPath(); c.arc(-24, 0, 21, 0, 7); c.fill(); c.beginPath(); c.arc(-48, 0, 8, 0, 7); c.fill();
+    c.fillStyle = gr; c.beginPath(); c.moveTo(-24, -19); c.lineTo(60, -26); c.lineTo(60, 26); c.lineTo(-24, 19); c.closePath(); c.fill(); c.strokeStyle = '#23252e'; c.lineWidth = 2; c.stroke();
+    c.fillStyle = '#f2b82c'; rrect(c, 8, -23, 7, 46, 3); c.fill(); rrect(c, 36, -25, 7, 50, 3); c.fill();
+    c.fillStyle = gr; rrect(c, 58, -31, 18, 62, 6); c.fill(); c.stroke();
+    c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = 2; c.beginPath(); c.moveTo(-10, -14); c.lineTo(54, -20); c.stroke();
     c.restore();
-    c.fillStyle = '#e8506f'; c.beginPath(); c.arc(LX, LY + 14, 26, 0, 7); c.fill(); c.fillStyle = '#2b1d2e'; c.beginPath(); c.arc(LX, LY + 14, 9, 0, 7); c.fill();
+    var dg = c.createRadialGradient(px - 9, py - 12, 4, px, py, 36); dg.addColorStop(0, '#ff8fa3'); dg.addColorStop(.6, '#e8506f'); dg.addColorStop(1, '#a82a47');
+    c.fillStyle = dg; c.beginPath(); c.arc(px, py + 6, 30, Math.PI, 0); c.lineTo(px + 30, py + 20); c.lineTo(px - 30, py + 20); c.closePath(); c.fill(); c.strokeStyle = '#7c1f38'; c.lineWidth = 2; c.stroke();
+    c.fillStyle = '#f2b82c'; rrect(c, px - 35, py + 15, 70, 8, 4); c.fill(); c.strokeStyle = '#9a6d0a'; c.lineWidth = 1.5; c.stroke();
+    c.fillStyle = 'rgba(255,255,255,.4)'; c.beginPath(); c.ellipse(px - 11, py - 10, 10, 5, -.5, 0, 7); c.fill();
   }
   function drawAim(c) {
     if (!G.aim || G.ammo <= 0) return;
-    var a = clampAim(G.aim), x = LX + a.dx * 46, y = LY + a.dy * 46, vx = a.dx * SPEED, vy = a.dy * SPEED, dt = .035;
+    var a = clampAim(G.aim), x = LX + a.dx * 74, y = LY + a.dy * 74, vx = a.dx * SPEED, vy = a.dy * SPEED, dt = .035;
     c.fillStyle = 'rgba(255,255,255,.9)';
     for (var i = 0; i < 16; i++) { x += vx * dt; y += vy * dt; vy += GRAV * dt; if (x < 14 || x > LW - 14 || y < 12) break; c.globalAlpha = 1 - i / 18; c.beginPath(); c.arc(x, y, 4 - i * .1, 0, 7); c.fill(); }
     c.globalAlpha = 1;
@@ -556,8 +634,6 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 
   var last = performance.now();
   function frame(now) { requestAnimationFrame(frame); var dt = Math.min(50, now - last); last = now; if (document.hidden) return; update(dt); render(now); }
-  menu(); requestAnimationFrame(frame);
+  menu(); initCloud(); requestAnimationFrame(frame);
 })();
 </script>
-
-</body></html>
