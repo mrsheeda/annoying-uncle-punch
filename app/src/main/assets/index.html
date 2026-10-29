@@ -222,7 +222,7 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
     updateHud();
   }
   function aliveCount() { return G.uncles.filter(function (u) { return u.state === 'alive' || u.state === 'stun'; }).length; }
-  function updateHud() { if (!G) return; $('lvlName').textContent = (G.idx + 1) + '. ' + G.L.name; $('gl').textContent = G.ammo; $('un').textContent = aliveCount(); }
+  function updateHud() { if (!G) return; $('lvlName').textContent = 'Level ' + (G.idx + 1); $('gl').textContent = G.ammo; $('un').textContent = aliveCount(); }
   function floatText(x, y, text, color, size) { G.floats.push({ x: x, y: y, t: 0, text: text, color: color, size: size || 26 }); }
   function burst(x, y, n, gold) { for (var i = 0; i < n; i++) { var a = Math.random() * 6.283, s = 80 + Math.random() * 170; G.parts.push({ x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 80, t: 0, life: 500 + Math.random() * 400, gold: gold, r: 4 + Math.random() * 6 }); } }
 
@@ -407,11 +407,7 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
     $('jgo').addEventListener('click', go);
     $('jmp').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); go(); } });
   }
-  function brief(i) {
-    screen = 'brief'; var L = getLevel(i), types = {}; L.uncles.forEach(function (u) { types[LABELS[u.big ? 'boss' : u.t]] = 1; });
-    show('<div class="card"><h2>Level ' + (i + 1) + '</h2><div class="big">' + L.name + '</div><p>' + Object.keys(types).join(', ') + '.</p><ul class="rules"><li>Press and drag to aim, release to launch.</li><li>You have <b>' + L.ammo + ' gloves</b> for <b>' + L.uncles.length + ' uncle' + (L.uncles.length > 1 ? 's' : '') + '</b>. Gloves bounce off the walls.</li><li>A knocked-out uncle can crash into others. Chain hits save gloves.</li></ul><div class="row"><button class="btn ghost" id="bk" type="button">Levels</button><button class="btn" id="go" type="button">Start</button></div></div>');
-    $('bk').addEventListener('click', menu); $('go').addEventListener('click', function () { start(i); });
-  }
+  function brief(i) { start(i); }
   function start(i) { hide(); $('hud').hidden = false; screen = 'play'; newGame(i); }
   function endGame(win) { if (G.over) return; G.over = true; G.won = win; G.endT = 0; if (win) { sWin(); burst(LW / 2, 260, 30, true); } else sLose(); }
   function showResult() {
