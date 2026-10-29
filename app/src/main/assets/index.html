@@ -46,6 +46,14 @@ input { user-select: text; -webkit-user-select: text; }
 .msg { min-height: 1.3em; font-size: 14px; color: #b3243e; text-align: center; }
 .btn.resume { background: var(--gold); color: var(--ink); }
 .row.quick .btn { font-size: 18px; min-height: 44px; }
+.lvwrap { display: flex; gap: 8px; align-items: stretch; }
+.lvlist { position: relative; flex: 1; min-width: 0; height: min(344px, 46vh); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.lvlist::-webkit-scrollbar { display: none; }
+.lvsp { position: relative; width: 100%; }
+.vrow { position: absolute; left: 0; right: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.vrow .tile { height: 58px; }
+.scrub { position: relative; flex: 0 0 34px; border-radius: 17px; background: #eadfcb; touch-action: none; cursor: pointer; box-shadow: inset 0 2px 0 rgba(0,0,0,.12); }
+.scrub .thumb { position: absolute; left: 3px; right: 3px; top: 0; height: 44px; border-radius: 14px; background: var(--pink); box-shadow: 0 3px 0 rgba(0,0,0,.25); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 16px; line-height: 1; pointer-events: none; }
 .hint { font-size: 12px; color: var(--muted); text-align: center; margin-top: -6px; }
 .tile[disabled] { background: var(--lock); cursor: not-allowed; box-shadow: 0 3px 0 rgba(0,0,0,.12); }
 .row.nav { align-items: center; flex-wrap: nowrap; gap: 6px; } .row.nav .btn { flex: 0 0 46px; padding: 6px 0; font-size: 22px; min-height: 46px; } .row.nav .big { flex: 1; font-size: 16px; white-space: nowrap; }
@@ -75,7 +83,7 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
   var cvs = $('c'), ctx = cvs.getContext('2d');
-  var LW = 400, LH = 620, LX = 200, LY = 556, SPEED = 800, GRAV = 520;
+  var LW = 400, LH = 620, LX = 200, LY = 556, SPEED = 700, GRAV = 700;
 
   /* ---------- levels ---------- */
   var SHIRTS = ['#3d7ea6', '#c0563a', '#4f8a5b', '#8a5fb0', '#d9a21b', '#2f6bb0'];
@@ -115,7 +123,7 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
         }).then(function (snap) {
           if (!snap) return; var d = snap.exists ? snap.data() : null, remote = (d && d.stars) || {};
           var changed = mergeStars(remote);
-          if (changed) { try { localStorage.setItem('annoying-uncle-punch', JSON.stringify(save)); } catch (e) {} if (screen === 'menu') { PAGE = null; menu(); } }
+          if (changed) { try { localStorage.setItem('annoying-uncle-punch', JSON.stringify(save)); } catch (e) {} if (screen === 'menu') { SCROLL = null; menu(); } }
           if (Object.keys(save.stars).some(function (k) { return (remote[k] | 0) < save.stars[k]; })) pushCloud();
         });
       }).catch(function () {});
@@ -314,7 +322,7 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 
   /* ---------- input ---------- */
   function toL(e) { return { x: (e.clientX - view.ox) / view.sc, y: (e.clientY - view.oy) / view.sc }; }
-  function clampAim(p) { var dx = p.x - LX, dy = Math.min(-40, p.y - LY); var l = Math.hypot(dx, dy) || 1; return { dx: dx / l, dy: dy / l }; }
+  function clampAim(p) { var dx = p.x - LX, dy = p.y - LY; var l = Math.hypot(dx, dy); if (l < 6) { dx = 0; dy = -1; l = 1; } return { dx: dx / l, dy: dy / l }; }
   cvs.addEventListener('pointerdown', function (e) { e.preventDefault(); if (!G || !G.running || G.over) return; try { cvs.setPointerCapture(e.pointerId); } catch (x) {} G.aim = toL(e); });
   cvs.addEventListener('pointermove', function (e) { if (G && G.aim) G.aim = toL(e); });
   function release(e) { if (!G || !G.aim) return; var a = clampAim(toL(e)); G.aim = null; fire(a); }
@@ -332,50 +340,68 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   function show(html) { ov.innerHTML = html; ov.hidden = false; }
   function hide() { ov.hidden = true; ov.innerHTML = ''; }
   function starStr(n) { var s = ''; for (var i = 0; i < 3; i++) s += i < n ? '★' : '<span class="off">★</span>'; return s; }
-  var PAGE = null, PER = 20, screen = 'menu';
+  var SCROLL = null, RH = 66, COLS = 5, screen = 'menu';
   function highest() { var h = -1; Object.keys(save.stars).forEach(function (k) { if ((save.stars[k] || 0) > 0 && +k > h) h = +k; }); return h; }
   function nextLevel() { return Math.min(TOTAL - 1, highest() + 1); }
-  function openMenu() { PAGE = null; menu(); }
+  function openMenu() { SCROLL = null; menu(); }
   function inProgress() { return !!(G && !G.over); }
   function resume() { if (!inProgress()) return; hide(); $('hud').hidden = false; G.running = true; screen = 'play'; }
-  function setPage(p) { var pages = Math.ceil(TOTAL / PER); PAGE = Math.max(0, Math.min(pages - 1, p)); drawGrid(); }
-  function drawGrid() {
-    var next = nextLevel(), pages = Math.ceil(TOTAL / PER), from = PAGE * PER, tiles = '';
-    for (var i = from; i < Math.min(TOTAL, from + PER); i++) {
-      var ok = i <= next, st = save.stars[i] || 0;
-      tiles += '<button class="tile' + (i === next ? ' cur' : '') + '" data-lv="' + i + '"' + (ok ? '' : ' disabled') + ' aria-label="Level ' + (i + 1) + (ok ? ', ' + st + ' stars' : ', locked') + '"><span class="n">' + (ok ? (i + 1) : '&#128274;') + '</span><span class="st">' + (ok ? starStr(st) : '') + '</span></button>';
-    }
-    $('grid').innerHTML = tiles; $('plabel').textContent = 'Levels ' + (from + 1) + '-' + Math.min(TOTAL, from + PER);
-    $('pg').value = PAGE; $('pp').disabled = $('pv').disabled = PAGE <= 0; $('nn').disabled = $('nx2').disabled = PAGE >= pages - 1;
-  }
+  function rowTop(lv) { return Math.max(0, (Math.floor(lv / COLS) - 1) * RH); }
   function menu() {
     if (G) G.running = false; $('hud').hidden = true; screen = 'menu';
-    var next = nextLevel(), pages = Math.ceil(TOTAL / PER), canResume = inProgress();
-    if (PAGE === null) PAGE = Math.floor(next / PER);
-    PAGE = Math.max(0, Math.min(pages - 1, PAGE));
+    var next = nextLevel(), rows = Math.ceil(TOTAL / COLS), canResume = inProgress();
+    if (SCROLL === null) SCROLL = rowTop(next);
     show('<div class="card">' + (canResume ? '<button class="btn resume" id="rs" type="button">Resume level ' + (G.idx + 1) + '</button>' : '') +
       '<h1>Annoying Uncle Punch</h1><p>Aim, release, and launch the boxing glove. Knock every uncle out before you run out of gloves. ' + TOTAL + ' levels.</p>' +
       '<button class="btn" id="cont" type="button">' + (canResume ? 'Go to my level ' : 'Continue: Level ') + (next + 1) + '</button>' +
-      '<div class="row nav"><button class="btn ghost" id="pp" type="button" aria-label="Back 10 pages">&laquo;</button><button class="btn ghost" id="pv" type="button" aria-label="Previous page">&lsaquo;</button><div class="big" id="plabel"></div><button class="btn ghost" id="nx2" type="button" aria-label="Next page">&rsaquo;</button><button class="btn ghost" id="nn" type="button" aria-label="Forward 10 pages">&raquo;</button></div>' +
-      '<input id="pg" type="range" min="0" max="' + (pages - 1) + '" value="' + PAGE + '" aria-label="Scroll through levels"><div class="hint">Drag to scroll through all ' + TOTAL + ' levels</div>' +
+      '<div class="big" id="plabel"></div>' +
+      '<div class="lvwrap"><div class="lvlist" id="lvl" tabindex="0" aria-label="Levels, scroll vertically"><div class="lvsp" id="lvsp" style="height:' + (rows * RH - 8) + 'px"></div></div>' +
+      '<div class="scrub" id="scrub" role="slider" aria-label="Scroll through levels" aria-orientation="vertical"><div class="thumb" id="thumb">&#8661;</div></div></div>' +
       '<div class="row quick"><button class="btn alt" id="mine" type="button">My level (' + (next + 1) + ')</button><button class="btn ghost" id="first" type="button">Level 1</button></div>' +
-      '<div class="grid" id="grid"></div>' +
       '<div class="row jump"><input id="jmp" type="number" inputmode="numeric" min="1" max="' + TOTAL + '" placeholder="Level number"><button class="btn alt" id="jgo" type="button">Go</button></div><div class="msg" id="jmsg" role="status"></div></div>');
-    drawGrid();
-    $('grid').addEventListener('click', function (e) { var b = e.target.closest ? e.target.closest('.tile') : null; if (b && !b.disabled) brief(+b.getAttribute('data-lv')); });
+    var lvl = $('lvl'), sp = $('lvsp'), scrub = $('scrub'), thumb = $('thumb'), shown = '';
+    function paint() {
+      var top = lvl.scrollTop, h = lvl.clientHeight, r0 = Math.max(0, Math.floor(top / RH) - 2), r1 = Math.min(rows - 1, Math.floor((top + h) / RH) + 2), key = r0 + ':' + r1 + ':' + next;
+      if (key !== shown) {
+        shown = key; var out = '';
+        for (var r = r0; r <= r1; r++) {
+          out += '<div class="vrow" style="top:' + (r * RH) + 'px">';
+          for (var c = 0; c < COLS; c++) {
+            var i = r * COLS + c; if (i >= TOTAL) break;
+            var ok = i <= next, st = save.stars[i] || 0;
+            out += '<button class="tile' + (i === next ? ' cur' : '') + '" data-lv="' + i + '"' + (ok ? '' : ' disabled') + ' aria-label="Level ' + (i + 1) + (ok ? ', ' + st + ' stars' : ', locked') + '"><span class="n">' + (ok ? (i + 1) : '&#128274;') + '</span><span class="st">' + (ok ? starStr(st) : '') + '</span></button>';
+          }
+          out += '</div>';
+        }
+        sp.innerHTML = out;
+      }
+      var first = Math.floor(top / RH) * COLS + 1;
+      $('plabel').textContent = 'Level ' + Math.min(TOTAL, first) + ' of ' + TOTAL;
+      var max = lvl.scrollHeight - h, free = scrub.clientHeight - thumb.offsetHeight;
+      thumb.style.top = (max > 0 ? Math.round(top / max * free) : 0) + 'px';
+      SCROLL = top;
+    }
+    function scrollTo(y) { lvl.scrollTop = y; paint(); }
+    lvl.addEventListener('scroll', function () { paint(); });
+    sp.addEventListener('click', function (e) { var b = e.target.closest ? e.target.closest('.tile') : null; if (b && !b.disabled) brief(+b.getAttribute('data-lv')); });
+    function fromPointer(e) {
+      var rc = scrub.getBoundingClientRect(), free = rc.height - thumb.offsetHeight, f = free > 0 ? (e.clientY - rc.top - thumb.offsetHeight / 2) / free : 0;
+      f = Math.max(0, Math.min(1, f)); scrollTo(f * (lvl.scrollHeight - lvl.clientHeight));
+    }
+    var drag = false;
+    scrub.addEventListener('pointerdown', function (e) { e.preventDefault(); drag = true; try { scrub.setPointerCapture(e.pointerId); } catch (x) {} fromPointer(e); });
+    scrub.addEventListener('pointermove', function (e) { if (drag) fromPointer(e); });
+    scrub.addEventListener('pointerup', function () { drag = false; });
+    scrub.addEventListener('pointercancel', function () { drag = false; });
+    scrollTo(SCROLL);
     if (canResume) $('rs').addEventListener('click', resume);
     $('cont').addEventListener('click', function () { brief(next); });
-    $('pv').addEventListener('click', function () { setPage(PAGE - 1); });
-    $('nx2').addEventListener('click', function () { setPage(PAGE + 1); });
-    $('pp').addEventListener('click', function () { setPage(PAGE - 10); });
-    $('nn').addEventListener('click', function () { setPage(PAGE + 10); });
-    $('pg').addEventListener('input', function () { setPage(+this.value); });
-    $('mine').addEventListener('click', function () { setPage(Math.floor(next / PER)); });
-    $('first').addEventListener('click', function () { setPage(0); });
+    $('mine').addEventListener('click', function () { scrollTo(rowTop(next)); });
+    $('first').addEventListener('click', function () { scrollTo(0); });
     function go() {
       var v = parseInt($('jmp').value, 10), msg = $('jmsg');
       if (!(v >= 1 && v <= TOTAL)) { msg.textContent = 'Enter a level from 1 to ' + TOTAL + '.'; return; }
-      if (v - 1 > next) { msg.textContent = 'Level ' + v + ' is locked. Your next level is ' + (next + 1) + '.'; setPage(Math.floor(next / PER)); return; }
+      if (v - 1 > next) { msg.textContent = 'Level ' + v + ' is locked. Your next level is ' + (next + 1) + '.'; scrollTo(rowTop(next)); return; }
       brief(v - 1);
     }
     $('jgo').addEventListener('click', go);
@@ -601,9 +627,16 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   }
   function drawAim(c) {
     if (!G.aim || G.ammo <= 0) return;
-    var a = clampAim(G.aim), x = LX + a.dx * 74, y = LY + a.dy * 74, vx = a.dx * SPEED, vy = a.dy * SPEED, dt = .035;
-    c.fillStyle = 'rgba(255,255,255,.9)';
-    for (var i = 0; i < 16; i++) { x += vx * dt; y += vy * dt; vy += GRAV * dt; if (x < 14 || x > LW - 14 || y < 12) break; c.globalAlpha = 1 - i / 18; c.beginPath(); c.arc(x, y, 4 - i * .1, 0, 7); c.fill(); }
+    var a = clampAim(G.aim), x = LX + a.dx * 74, y = LY + a.dy * 74, vx = a.dx * SPEED, vy = a.dy * SPEED, dt = .02, hit = null, n = 0;
+    for (var i = 0; i < 130 && !hit; i++) {
+      x += vx * dt; y += vy * dt; vy += GRAV * dt;
+      if (x < 14) { x = 14; vx = Math.abs(vx) * .85; } else if (x > LW - 14) { x = LW - 14; vx = -Math.abs(vx) * .85; }
+      if (y < 12) { y = 12; vy = Math.abs(vy) * .8; }
+      if (y > LH + 20) break;
+      for (var k = 0; k < G.uncles.length; k++) { var u = G.uncles[k]; if (u.state !== 'alive') continue; var e = hitbox(u); if (e && overlap(e, x, y, 13)) { hit = { x: x, y: y }; break; } }
+      if (i % 2 === 0 && !hit) { n++; c.globalAlpha = Math.max(.25, 1 - i / 150); c.fillStyle = '#fff'; c.beginPath(); c.arc(x, y, Math.max(2.2, 4.4 - i * .02), 0, 7); c.fill(); }
+    }
+    if (hit) { c.globalAlpha = .95; c.strokeStyle = '#ffd34d'; c.lineWidth = 3; c.beginPath(); c.arc(hit.x, hit.y, 13, 0, 7); c.stroke(); }
     c.globalAlpha = 1;
   }
 
