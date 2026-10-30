@@ -762,9 +762,12 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   function idleAng() {
     if (G.lastAng === undefined) {
       var best = null, bd = 1e9; G.uncles.forEach(function (u) { if (u.state !== 'alive') return; var e = hitbox(u); if (!e) return; var d = Math.abs(e.cx - LX) + Math.abs(e.cy - LY) * .3; if (d < bd) { bd = d; best = e; } });
-      var a = best ? Math.atan2(best.cy - LY, best.cx - LX) : -1.15;
-      if (a > -.5 || a < -2.64) a = a > -1.57 ? -.5 : -2.64;
-      if (Math.abs(a + 1.5708) < .35) a = a < -1.5708 ? -1.92 : -1.22;
+      var a = best ? Math.atan2(best.cy - LY, best.cx - LX) : -1.0, V = -Math.PI / 2;
+      var side = a >= V ? 1 : -1, off = Math.abs(a - V);               /* radians away from straight up */
+      var low = best ? Math.max(0, Math.min(1, (best.cy - 300) / 260)) : 0.3; /* 0 = target high, 1 = target low */
+      off = Math.max(off, .62 + .5 * low);                                /* never near vertical; lower target = more tilt */
+      off = Math.min(off, 1.28);
+      a = V + side * off;
       G.lastAng = a;
     }
     return G.lastAng;
