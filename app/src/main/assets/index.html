@@ -389,7 +389,7 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   function clampAim(p) { var dx = p.x - LX, dy = p.y - LY; var l = Math.hypot(dx, dy); if (l < 6) { dx = 0; dy = -1; l = 1; } return { dx: dx / l, dy: dy / l }; }
   cvs.addEventListener('pointerdown', function (e) { e.preventDefault(); if (!G || !G.running || G.over) return; try { cvs.setPointerCapture(e.pointerId); } catch (x) {} G.aim = toL(e); });
   cvs.addEventListener('pointermove', function (e) { if (G && G.aim) G.aim = toL(e); });
-  function release(e) { if (!G || !G.aim) return; var a = clampAim(toL(e)); G.aim = null; fire(a); }
+  function release(e) { if (!G || !G.aim) return; var a = clampAim(toL(e)); G.lastAng = Math.atan2(a.dy, a.dx); G.aim = null; fire(a); }
   cvs.addEventListener('pointerup', release);
   cvs.addEventListener('pointercancel', function () { if (G) G.aim = null; });
   function fire(a) {
@@ -735,7 +735,7 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
     c.fillStyle = '#b8bfce'; c.beginPath(); c.arc(x, y, 4.5, 0, 7); c.fill();
   }
   function drawCannon(c, tm, gold) {
-    var aim = G.aim ? clampAim(G.aim) : { dx: 0, dy: -1 }, ang = Math.atan2(aim.dy, aim.dx), px = LX, py = LY;
+    var ang = curAng(tm), px = LX, py = LY;
     var rec = G.recoil > 0 ? G.recoil / 160 * 14 : 0;
     c.fillStyle = 'rgba(0,0,0,.28)'; c.beginPath(); c.ellipse(px, py + 46, 86, 12, 0, 0, 7); c.fill();
     var bg = c.createLinearGradient(0, py + 16, 0, py + 42); bg.addColorStop(0, '#6b7183'); bg.addColorStop(1, '#343845');
@@ -759,7 +759,18 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   }
 
   /* ---------- one launcher per weapon ---------- */
-  function lAng() { var a = G.aim ? clampAim(G.aim) : { dx: 0, dy: -1 }; return Math.atan2(a.dy, a.dx); }
+  function idleAng() {
+    if (G.lastAng === undefined) {
+      var best = null, bd = 1e9; G.uncles.forEach(function (u) { if (u.state !== 'alive') return; var e = hitbox(u); if (!e) return; var d = Math.abs(e.cx - LX) + Math.abs(e.cy - LY) * .3; if (d < bd) { bd = d; best = e; } });
+      var a = best ? Math.atan2(best.cy - LY, best.cx - LX) : -1.15;
+      if (a > -.5 || a < -2.64) a = a > -1.57 ? -.5 : -2.64;
+      if (Math.abs(a + 1.5708) < .35) a = a < -1.5708 ? -1.92 : -1.22;
+      G.lastAng = a;
+    }
+    return G.lastAng;
+  }
+  function curAng(tm) { if (G.aim) { var a = clampAim(G.aim); G.lastAng = Math.atan2(a.dy, a.dx); return G.lastAng; } return idleAng() + Math.sin((tm || 0) / 900) * .025; }
+  function lAng() { return curAng(G.tmNow); }
   function lRec() { return G.recoil > 0 ? G.recoil / 160 * 14 : 0; }
   function lLoaded() { return G.ammo > 0 && !G.over; }
   function lShadow(c, w) { c.fillStyle = 'rgba(0,0,0,.28)'; c.beginPath(); c.ellipse(LX, LY + 46, w, 12, 0, 0, 7); c.fill(); }
@@ -842,7 +853,7 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
     c.restore(); lHub(c, '#6b5a33');
   }
   function drawLauncher(c, tm) {
-    var cw = curWeapon();
+    var cw = curWeapon(); G.tmNow = tm;
     if (cw.id === 'arrow') drawBow(c, tm, cw);
     else if (cw.id === 'poop') drawCatapult(c, tm, cw);
     else if (cw.id === 'laser') drawBlaster(c, tm, cw);
